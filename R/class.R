@@ -6,7 +6,7 @@ JDBC <- function(driverClass='', classPath='', identifier.quote=NA) {
   ## expand all paths in the classPath
   classPath <- path.expand(unlist(strsplit(classPath, .Platform$path.sep)))
   .jinit(classPath) ## this is benign in that it's equivalent to .jaddClassPath if a JVM is running
-  .jaddClassPath(system.file("java", "RJDBC.jar", package="RJDBC"))
+  .jaddClassPath(system.file("java", "RPSQL.jar", package="RPSQL"))
   if (nchar(driverClass) && is.jnull(.jfindClass(as.character(driverClass)[1])))
     stop("Cannot find JDBC driver class ",driverClass)
   jdrv <- .jnew(driverClass, check=FALSE)
@@ -267,15 +267,16 @@ setMethod("dbWriteTable", "JDBCConnection", def=function(conn, name, value, over
     on.exit(.jcall(conn@jc, "V", "setAutoCommit", ac))
   }
   if (!append) {
-    ct <- paste("CREATE TABLE ",qname," (",fdef,")",sep= '')
+    ct <- paste("CREATE TABLE ",qname," (",fdef," CONSTRAINT pk PRIMARY KEY (uniqueNotNullPkField)))",sep= '')
     dbSendUpdate(conn, ct)
   }
   if (length(value[[1]])) {
-    inss <- paste("INSERT INTO ",qname," VALUES(", paste(rep("?",length(value)),collapse=','),")",sep='')
+    inss <- paste("UPSERT INTO ",qname," VALUES(", paste(rep("?",length(value)),collapse=','),")",sep='')
     for (j in 1:length(value[[1]]))
       dbSendUpdate(conn, inss, list=as.list(value[j,]))
   }
-  if (ac) dbCommit(conn)            
+  dbCommit(conn)
+  #if (ac) dbCommit(conn)            
 })
 
 setMethod("dbCommit", "JDBCConnection", def=function(conn, ...) {.jcall(conn@jc, "V", "commit"); TRUE})
@@ -304,7 +305,7 @@ setMethod("fetch", signature(res="JDBCResult", n="numeric"), def=function(res, n
   }
   rp <- res@pull
   if (is.jnull(rp)) {
-    rp <- .jnew("info/urbanek/Rpackage/RJDBC/JDBCResultPull", .jcast(res@jr, "java/sql/ResultSet"), .jarray(as.integer(cts)))
+    rp <- .jnew("info/itsamiths/Rpackage/RPSQL/JDBCResultPull", .jcast(res@jr, "java/sql/ResultSet"), .jarray(as.integer(cts)))
     .verify.JDBC.result(rp, "cannot instantiate JDBCResultPull hepler class")
   }
   if (n < 0L) { ## infinite pull
