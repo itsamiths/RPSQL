@@ -1,5 +1,5 @@
 Package: RPSQL
-Version: 1-a
+Version: 1
 Title: Provides access to apache phoenix database through the JDBC interface
 Author: Amith Kumar M K <mkamithkumar@gmail.com>
 Maintainer: Amith Kumar M K <mkamithkumar@gmail.com>
