@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PNAME=RJDBC
+PNAME=RPSQL
 SWD=`pwd`
 echo "Removing previous dist ..."
 rm -rf /tmp/${PNAME}
