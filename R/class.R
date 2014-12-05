@@ -251,6 +251,10 @@ setMethod("dbWriteTable", "JDBCConnection", def=function(conn, name, value, over
   } else {
     if (!is.data.frame(value)) value <- as.data.frame(value)
   }
+  # to create primary key field
+  index <- nrow(value) 
+  value$uniqueNotNullPkField <- 1:index +1 #uniqueNotNullPkField -> pk field in newly created table
+  
   fts <- sapply(value, dbDataType, dbObj=conn)
   if (dbExistsTable(conn, name)) {
     if (overwrite) dbRemoveTable(conn, name)
