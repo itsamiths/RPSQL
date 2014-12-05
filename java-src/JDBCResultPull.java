@@ -1,4 +1,4 @@
-package info.urbanek.Rpackage.RJDBC;
+package info.itsamiths.Rpackage.RPSQL;
 
 import java.sql.ResultSet;
 
