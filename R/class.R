@@ -267,7 +267,7 @@ setMethod("dbWriteTable", "JDBCConnection", def=function(conn, name, value, over
     on.exit(.jcall(conn@jc, "V", "setAutoCommit", ac))
   }
   if (!append) {
-    ct <- paste("CREATE TABLE ",qname," (",fdef," CONSTRAINT pk PRIMARY KEY (uniqueNotNullPkField)))",sep= '')
+    ct <- paste("CREATE TABLE ",qname," (",fdef," CONSTRAINT pk PRIMARY KEY (uniqueNotNullPkField))",sep= '')
     dbSendUpdate(conn, ct)
   }
   if (length(value[[1]])) {
