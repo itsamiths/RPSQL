@@ -1,3 +1,14 @@
+# PSQLConnection
+
+setClass(
+	"PSQLConnection",
+	representation(
+		"DBIConnection",
+		jc="jobjRef",
+		identifier.quote="character"
+	)
+)
+
 #dbDisconnect
 
 setMethod(
@@ -16,7 +27,6 @@ setMethod(
 	signature(conn="PSQLConnection", statement="character"),
 	def=function(conn, statement, ...) {
 		r <- dbSendQuery(conn, statement, ...)
-		## Teradata needs this - closing the statement also closes the result set according to Java docs
 		on.exit(.jcall(r@stat, "V", "close"))
 		fetch(r, -1)
 	}
@@ -194,5 +204,151 @@ setMethod(
 	def=function(conn, ...) {
 		.jcall(conn@jc, "V", "rollback");
 		TRUE
+	}
+)
+
+#dbGetFields
+
+if (is.null(getGeneric("dbGetFields")))
+	setGeneric(
+		"dbGetFields",
+		function(conn, ...) 
+		standardGeneric("dbGetFields")
+	)
+
+setMethod(
+	"dbGetFields",
+	"PSQLConnection",
+	def=function(conn, name, pattern="%", ...) {
+		md <- .jcall(conn@jc, "Ljava/sql/DatabaseMetaData;", "getMetaData", check=FALSE)
+		.verify.PSQL.result(md, "Unable to retrieve Phoenix JDBC database metadata")
+		r <- .jcall(
+			md,
+			"Ljava/sql/ResultSet;", 
+			"getColumns", 
+			.jnull("java/lang/String"),
+			.jnull("java/lang/String"), 
+			name,
+			pattern,
+			check=FALSE
+		)
+		.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC columns list for ",name)
+		on.exit(.jcall(r, "V", "close"))
+		.fetch.result(r)
+	}
+)
+
+#dbGetTables
+
+if (is.null(getGeneric("dbGetTables"))) 
+	setGeneric(
+		"dbGetTables",
+		function(conn, ...) 
+		standardGeneric("dbGetTables")
+	)
+
+setMethod(
+	"dbGetTables",
+	"PSQLConnection",
+	def=function(conn, pattern="%", ...) {
+		md <- .jcall(conn@jc, "Ljava/sql/DatabaseMetaData;", "getMetaData", check=FALSE)
+		.verify.PSQL.result(md, "Unable to retrieve Phoenix JDBC database metadata")
+		r <- .jcall(
+			md,
+			"Ljava/sql/ResultSet;",
+			"getTables",
+			.jnull("java/lang/String"),
+			.jnull("java/lang/String"),
+			pattern,
+			.jnull("[Ljava/lang/String;"),
+			check=FALSE
+		)
+		.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC tables list")
+		on.exit(.jcall(r, "V", "close"))
+		.fetch.result(r)
+	}
+)
+
+#dbSendQuery
+
+setMethod(
+	"dbSendQuery",
+	signature(conn="PSQLConnection", statement="character"),
+	def=function(conn, statement, ..., list=NULL) {
+		statement <- as.character(statement)[1L]
+		## if the statement starts with {call or {?= call then we use CallableStatement 
+		if (isTRUE(as.logical(grepl("^\\{(call|\\?= *call)", statement)))) {
+			s <- .jcall(conn@jc, "Ljava/sql/CallableStatement;", "prepareCall", statement, check=FALSE)
+			.verify.PSQL.result(s, "Unable to execute Phoenix JDBC callable statement ",statement)
+			if (length(list(...)))
+				.fillStatementParameters(s, list(...))
+			if (!is.null(list))
+				.fillStatementParameters(s, list)
+			r <- .jcall(s, "Ljava/sql/ResultSet;", "executeQuery", check=FALSE)
+			.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC result set for ",statement)
+		} else if (length(list(...)) || length(list)) { ## use prepared statements if there are additional arguments
+			s <- .jcall(conn@jc, "Ljava/sql/PreparedStatement;", "prepareStatement", statement, check=FALSE)
+			.verify.PSQL.result(s, "Unable to execute Phoenix JDBC prepared statement ", statement)
+			if (length(list(...)))
+				.fillStatementParameters(s, list(...))
+			if (!is.null(list))
+				.fillStatementParameters(s, list)
+			r <- .jcall(s, "Ljava/sql/ResultSet;", "executeQuery", check=FALSE)
+			.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC result set for ",statement)
+		} else { 
+			s <- .jcall(conn@jc, "Ljava/sql/Statement;", "createStatement")
+			.verify.PSQL.result(s, "Unable to create simple Phoenix JDBC statement ",statement)
+			r <- .jcall(s, "Ljava/sql/ResultSet;", "executeQuery", as.character(statement)[1], check=FALSE)
+			.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC result set for ",statement)
+		} 
+		md <- .jcall(r, "Ljava/sql/ResultSetMetaData;", "getMetaData", check=FALSE)
+		.verify.PSQL.result(md, "Unable to retrieve Phoenix JDBC result set meta data for ",statement, " in dbSendQuery")
+		new("PSQLResult", jr=r, md=md, stat=s, pull=.jnull())
+	}
+)
+
+#dbSendUpdate
+
+if (is.null(getGeneric("dbSendUpdate")))
+	setGeneric(
+		"dbSendUpdate",
+		function(conn, statement, ...)
+		standardGeneric("dbSendUpdate")
+	)
+
+setMethod(
+	"dbSendUpdate",
+	signature(conn="PSQLConnection", statement="character"),
+	def=function(conn, statement, ..., list=NULL) {
+		statement <- as.character(statement)[1L]
+		## if the statement starts with {call or {?= call then we use CallableStatement 
+		if (isTRUE(as.logical(grepl("^\\{(call|\\?= *call)", statement)))) {
+			s <- .jcall(conn@jc, "Ljava/sql/CallableStatement;", "prepareCall", statement, check=FALSE)
+			.verify.PSQL.result(s, "Unable to execute Phoenix JDBC callable statement ",statement)
+			on.exit(.jcall(s, "V", "close")) 
+			if (length(list(...)))
+				.fillStatementParameters(s, list(...))
+			if (!is.null(list))
+				.fillStatementParameters(s, list)
+			r <- .jcall(s, "Ljava/sql/ResultSet;", "executeQuery", check=FALSE)
+			.verify.PSQL.result(r, "Unable to retrieve Phoenix JDBC result set for ",statement)
+		} else if (length(list(...)) || length(list)) { ## use prepared statements if there are additional arguments
+			s <- .jcall(conn@jc, "Ljava/sql/PreparedStatement;", "prepareStatement", statement, check=FALSE)
+			.verify.PSQL.result(s, "Unable to execute Phoenix JDBC prepared statement ", statement)
+			on.exit(.jcall(s, "V", "close")) 
+			if (length(list(...)))
+				.fillStatementParameters(s, list(...))
+			if (!is.null(list))
+				.fillStatementParameters(s, list)
+			.jcall(s, "I", "executeUpdate", check=FALSE)
+		} else {
+			s <- .jcall(conn@jc, "Ljava/sql/Statement;", "createStatement")
+			.verify.PSQL.result(s, "Unable to create Phoenix JDBC statement ",statement)
+			on.exit(.jcall(s, "V", "close")) 
+			.jcall(s, "I", "executeUpdate", as.character(statement)[1], check=FALSE)
+		}
+		x <- .jgetEx(TRUE)
+		if (!is.jnull(x))
+			stop("execute Phoenix JDBC update query failed in dbSendUpdate (", .jcall(x, "S", "getMessage"),")")
 	}
 )
