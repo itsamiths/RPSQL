@@ -1,3 +1,28 @@
+#PSQLDriver
+
+setClass(
+	"PSQLDriver",
+	representation(
+		"DBIDriver",
+		identifier.quote="character",
+		psqlDriver="jobjRef"
+	)
+)
+
+PSQL <- function(driverClass='', classPath='', identifier.quote=NA) {
+	## expand all paths in the classPath
+	classPath <- path.expand(unlist(strsplit(classPath, .Platform$path.sep)))
+	.jinit(classPath) ## this is benign in that it's equivalent to .jaddClassPath if a JVM is running
+	.jaddClassPath(system.file("java", "RPSQL.jar", package="RPSQL"))
+	if (nchar(driverClass) && is.jnull(.jfindClass(as.character(driverClass)[1])))
+		stop("Cannot find Phoenix driver class ",driverClass)
+	psqlDriver <- .jnew(driverClass, check=FALSE)
+	.jcheck(TRUE)
+	if (is.jnull(psqlDriver)) 
+		psqlDriver <- .jnull()
+	new("PSQLDriver", identifier.quote=as.character(identifier.quote), psqlDriver=psqlDriver)
+}
+
 #dbGetInfo
 
 setMethod(
